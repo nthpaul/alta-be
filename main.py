@@ -12,13 +12,16 @@ SERP_API_KEY = os.environ.get("SERP_API_KEY")
 
 class SearchRequest(BaseModel):
     query: str
+    is_fetch_pairing: bool = False
+    max_num_products: int = 10
 
-def fetch_products(query: str):
+def fetch_products(query: str, max_results: int = 10):
     url = "https://serpapi.com/search.json"
     params = {
         "engine": "google_shopping",
         "q": query,
         "api_key": SERP_API_KEY,
+        "number": max_results,
     }
     response = requests.get(url, params=params)
     if response.status_code != 200:
@@ -27,7 +30,7 @@ def fetch_products(query: str):
     data = response.json()
     products = []
 
-    for item in data.get("shopping_results", []):
+    for item in data.get("shopping_results", [])[:max_results]:
         price = item.get("price", "")
 
         # Extract price as a float (e.g., "$120" → 120.0)
@@ -98,11 +101,30 @@ def extract_filters(products):
 
 @app.post('/search')
 async def search(request: SearchRequest):
+    system_message = (
+        "You are a shopping assistant and outfit picker extraordinaire. "
+        "When given a query, return a JSON array of products. Each product should have a name, price, and source (store link)."
+    )
+
+    # for pairings, we could even use vision models to describe the product better and pass that output to get better suggestions
+    # seems like gpt-4o tends to create a query for only one product most of the time 
+    # and it looks when it does generate a query for more than one product, serpapi/google shopping is pretty limited in terms of the number of products it can return
+    # i.e. it can only return 100 products at a time but nearly all (usually all) of the items are dominated by the first product in the query
+    # if it did return a variety of products then we could filter and return the top X products we think best fit by some strategy, but this doesn't seem to be the case
+    # one alternative work around would be to make multiple calls to the api with different queries
+    if request.is_fetch_pairing:
+        system_message = (
+            "You are a fashion stylist. Given a product name, suggest 2 complementary fashion products that pair well with it. "
+            "Prioritize matching styles, colors, and trends."
+            "Ensure the selections align with the item's style, color, and current fashion trends to create a cohesive look."
+            "To ensure we can search for multiple products, you must follow this query format 'X or Y'"
+        )
+
     response = client.beta.chat.completions.parse(
         messages=[
             {
                 "role": "system",
-                "content": "You are a shopping assistant and outfit picker extraordinaire. When given a query, return a JSON array of products. Each product should have a name, price, and source (store link)."
+                "content": system_message
             },
             {
                 "role": "user",
@@ -136,8 +158,17 @@ async def search(request: SearchRequest):
             if call.function.name == "fetch_products":
                 print(call.function.arguments)
                 query = json.loads(call.function.arguments)["query"]
-                products = fetch_products(query)
+                max_results = 5 if request.is_fetch_pairing else request.max_num_products
+                products = fetch_products(query, max_results=max_results)
+
+                print(request)
+                print(request.is_fetch_pairing == True)
+
+                if products and request.is_fetch_pairing:
+                    return {"products": products}
+
                 filters = extract_filters(products)
                 return {"products": products, "filters": filters}
+
 
     return {"message": "No products found"}
