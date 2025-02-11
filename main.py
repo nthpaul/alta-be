@@ -1,35 +1,26 @@
-from re import M
 from fastapi import FastAPI, Query
 from pydantic import BaseModel
-from typing import List
+# from typing import List
+from openai import OpenAI
+import os
 
 app = FastAPI()
 
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"),)
 
-# MOCK SEARCH
-class Product(BaseModel):
-    id: int
-    name: str
-    brand: str
-    price: float
-    image_url: str
-    source_url: str
+class SearchRequest(BaseModel):
+    query: str
 
-MOCK_PRODUCTS = [
-    {"id": 1, "name": "Black T-Shirt", "brand": "Nike", "price": 29.99, 
-     "image_url": "https://via.placeholder.com/150", "source_url": "https://nike.com"},
-    {"id": 2, "name": "White Sneakers", "brand": "Adidas", "price": 79.99, 
-     "image_url": "https://via.placeholder.com/150", "source_url": "https://adidas.com"},
-    {"id": 3, "name": "Blue Jeans", "brand": "Levi's", "price": 59.99, 
-     "image_url": "https://via.placeholder.com/150", "source_url": "https://levis.com"},
-]
-
-@app.get('/')
-def read_root():
-    return {'message': 'the server is running'}
-
-@app.get('/search', response_model=List[Product])
-def search_products(query: str = Query(..., description="Search query for products")):
-    results = [p for p in MOCK_PRODUCTS if query.lower() in p['name'].lower()]
-    return results if results else MOCK_PRODUCTS
-
+@app.post('/search')
+async def search(request: SearchRequest):
+    response = client.chat.completions.create(
+        messages=[
+            {
+                "role": "system",
+                "content": "Search for products related to " + request.query
+            }
+        ],
+        model="gpt-4o",
+    )
+    print(response)
+    return response.choices[0].message.content
