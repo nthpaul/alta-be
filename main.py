@@ -5,8 +5,18 @@ import os
 import requests
 import json
 import re
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+    allow_credentials=True,
+)
+
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"),)
 SERP_API_KEY = os.environ.get("SERP_API_KEY")
 
@@ -33,7 +43,6 @@ def fetch_products(query: str, max_results: int = 10):
     for item in data.get("shopping_results", [])[:max_results]:
         price = item.get("price", "")
 
-        # Extract price as a float (e.g., "$120" → 120.0)
         price_match = re.search(r"[\d,]+\.?\d*", price)
         price_value = float(price_match.group().replace(",", "")) if price_match else None
 
@@ -107,8 +116,10 @@ async def search(request: SearchRequest):
     )
 
     # for pairings, we could even use vision models to describe the product better and pass that output to get better suggestions
-    # seems like gpt-4o tends to create a query for only one product most of the time 
-    # and it looks when it does generate a query for more than one product, serpapi/google shopping is pretty limited in terms of the number of products it can return
+    # seems like gpt-4o and o1 tend to create a query for only one product most of the time
+    # EDIT: it seems like asking the LLM to take its time to find the perfect pairings and then forming that into a query works a little better in getting a query for more than one product
+
+    # it looks when it does generate a query for more than one product, serpapi/google shopping is pretty limited in terms of the number of products it can return
     # i.e. it can only return 100 products at a time but nearly all (usually all) of the items are dominated by the first product in the query
     # if it did return a variety of products then we could filter and return the top X products we think best fit by some strategy, but this doesn't seem to be the case
     # one alternative work around would be to make multiple calls to the api with different queries
@@ -118,6 +129,7 @@ async def search(request: SearchRequest):
             "Prioritize matching styles, colors, and trends."
             "Ensure the selections align with the item's style, color, and current fashion trends to create a cohesive look."
             "To ensure we can search for multiple products, you must follow this query format 'X or Y'"
+            "Take your time to find the perfect pairings, then form that into a query to pass to the function call."
         )
 
     response = client.beta.chat.completions.parse(
@@ -149,7 +161,7 @@ async def search(request: SearchRequest):
                 }
             }
         ],
-        model="gpt-4o",
+        model="gpt-4o"
     )
     
     tool_calls = response.choices[0].message.tool_calls
@@ -160,9 +172,6 @@ async def search(request: SearchRequest):
                 query = json.loads(call.function.arguments)["query"]
                 max_results = 5 if request.is_fetch_pairing else request.max_num_products
                 products = fetch_products(query, max_results=max_results)
-
-                print(request)
-                print(request.is_fetch_pairing == True)
 
                 if products and request.is_fetch_pairing:
                     return {"products": products}
