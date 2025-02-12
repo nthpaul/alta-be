@@ -113,6 +113,7 @@ async def search(request: SearchRequest):
     system_message = (
         "You are a shopping assistant and outfit picker extraordinaire. "
         "When given a query, return a JSON array of products. Each product should have a name, price, and source (store link)."
+        "If you are given a user query which doesn't make sense, then make up your own random outfit query."
     )
 
     # for pairings, we could even use vision models to describe the product better and pass that output to get better suggestions
