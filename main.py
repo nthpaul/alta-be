@@ -31,7 +31,11 @@ def fetch_products(query: str, max_results: int = 10):
         "engine": "google_shopping",
         "q": query,
         "api_key": SERP_API_KEY,
-        "number": max_results,
+        # `num` has been deprecated for the new google shopping layout, but you could use it for regions still using the old layout
+        "num": max_results,
+        # active issue with serpAPI where direct_link is not being returned https://github.com/serpapi/public-roadmap/issues/1889
+        # one alternative for the actual product would be to directly use google's custom search JSON API https://developers.google.com/custom-search/v1/overview
+        "direct_link": "true"
     }
     response = requests.get(url, params=params)
     if response.status_code != 200:
@@ -174,8 +178,10 @@ async def search(request: SearchRequest):
                 max_results = 5 if request.is_fetch_pairing else request.max_num_products
                 products = fetch_products(query, max_results=max_results)
 
+                print(products)
+
                 if products and request.is_fetch_pairing:
-                    return {"products": products}
+                    return products
 
                 filters = extract_filters(products)
                 return {"products": products, "filters": filters}
