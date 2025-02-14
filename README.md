@@ -18,7 +18,7 @@ A FastAPI server with simple AI orchestration to generate outfits based on a use
 - [x] Suggestions based on an existing outfit (pair complementary items)
 - [x] Dynamic filters based on search results (brand, color, material, etc.)
 
-## Enhancements for a full system:
+## Considerations for a full app:
 - [ ] User Authentication (accounts, session management)
 - [ ] Database Integration
     - Store user chat history, preferences, saved outfits, wishlist
@@ -28,4 +28,8 @@ A FastAPI server with simple AI orchestration to generate outfits based on a use
     - Enable smarter outfit recommendations beyond text matching (vision, preferences, etc.)
     - Payments & E-commerce Integration (checkout, order tracking)
     - Social Features (share outfits, follow users, save favorite looks)
-- [ ] Region-specific recommendations (local brands, weather, etc.)
+- [ ] Region-specific recommendations (local brands, weather, currency, etc.)
+
+## On simulating AI chain of thought in the UI
+A naive approach would be to pass the user's query to an AI that outputs a structured response that fills the blanks in a template for steps that take place in the AI orchestration pipeline.
+E.g. For instance, if a user searches for 'affordable minimalist sneakers,' the AI might structure its thought process like: 1) Prioritizing budget-friendly options, 2) Filtering for minimalist styles, 3) Highlighting brands you've interacted with before.
