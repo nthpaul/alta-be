@@ -7,6 +7,9 @@ import json
 import re
 from fastapi.middleware.cors import CORSMiddleware
 
+import redis
+import hashlib
+
 app = FastAPI()
 
 app.add_middleware(
@@ -20,10 +23,25 @@ app.add_middleware(
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"),)
 SERP_API_KEY = os.environ.get("SERP_API_KEY")
 
-class SearchRequest(BaseModel):
-    query: str
-    is_fetch_pairing: bool = False
-    max_num_products: int = 10
+redis_client = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+
+# we'd probably want user-specific caching in the actual app
+# to do that, we'd cache on the user's id as well e.g. hash_key = hashlib.sha256(f"{user_id}:{normalized_query}".encode()).hexdigest()
+# and return something like "search:{user_id}:{hash_key}:{max_results}"
+def get_cache_key(query: str, max_results: int):
+    """Creates a cache key based on query and max_results"""
+    normalized_query = query.lower().strip()
+    hash_key = hashlib.sha256(normalized_query.encode()).hexdigest()
+    return f"search:{hash_key}:{max_results}"
+
+def fetch_products_and_filters_with_cache(query: str, max_results: int = 10):
+    cache_key = get_cache_key(query, max_results)
+    cached_results = redis_client.get(cache_key)
+    if cached_results:
+        return json.loads(cached_results)
+
+def cache_result(cache_key, data, ttl=600):
+    redis_client.setex(cache_key, ttl, json.dumps(data))
 
 def fetch_products(query: str, max_results: int = 10):
     url = "https://serpapi.com/search.json"
@@ -101,6 +119,8 @@ def extract_filters(products):
 
                 valid_prices = [p["price"] for p in products if isinstance(p["price"], (int, float))]
 
+                print(response)
+
                 return {
                     "brands": response["brands"],
                     "colors": response["colors"],
@@ -111,9 +131,19 @@ def extract_filters(products):
                 }
     return {"brands": [], "colors": [], "types": [], "materials": [], "min_price": 0, "max_price": 0}
 
+class SearchRequest(BaseModel):
+    query: str
+    is_fetch_pairing: bool = False
+    max_num_products: int = 10
 
 @app.post('/search')
 async def search(request: SearchRequest):
+    # check if we have a cached result using the user's query
+    cached_results = fetch_products_and_filters_with_cache(request.query, request.max_num_products)
+    print(cached_results)
+    if cached_results:
+        return cached_results
+
     system_message = (
         "You are a shopping assistant and outfit picker extraordinaire. "
         "When given a query, return a JSON array of products. Each product should have a name, price, and source (store link)."
@@ -168,23 +198,32 @@ async def search(request: SearchRequest):
         ],
         model="gpt-4o"
     )
-    
+        
     tool_calls = response.choices[0].message.tool_calls
     if tool_calls:
         for call in tool_calls:
             if call.function.name == "fetch_products":
-                print(call.function.arguments)
+                print(call.function.arguments) # the query that gpt comes up with
                 query = json.loads(call.function.arguments)["query"]
                 max_results = 5 if request.is_fetch_pairing else request.max_num_products
-                products = fetch_products(query, max_results=max_results)
 
-                print(products)
+                # we don't cache pairings since they are saved in local storage atm
+                if not request.is_fetch_pairing:
+                    cached_results = fetch_products_and_filters_with_cache(query, max_results)
+                    if cached_results:
+                        return cached_results
+
+                products = fetch_products(query, max_results=max_results)
 
                 if products and request.is_fetch_pairing:
                     return products
 
                 filters = extract_filters(products)
-                return {"products": products, "filters": filters}
-
+                response_data = {"products": products, "filters": filters}
+                cache_key_with_gpt_query = get_cache_key(query, max_results)
+                cache_key_with_user_query = get_cache_key(request.query, max_results)
+                cache_result(cache_key_with_gpt_query, response_data)
+                cache_result(cache_key_with_user_query, response_data)
+                return response_data
 
     return {"message": "No products found"}
