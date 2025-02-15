@@ -1,7 +1,14 @@
 # Local
 ```
+python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+```
+
+If you don't have redis installed
+```
+brew install redis
+brew services start redis
 ```
 
 Add API keys to `.env`
@@ -17,6 +24,7 @@ A FastAPI server with simple AI orchestration to generate outfits based on a use
 - [x] Query based outfit generation (search for clothing & get recommendations)
 - [x] Suggestions based on an existing outfit (pair complementary items)
 - [x] Dynamic filters based on search results (brand, color, material, etc.)
+- [x] Basic query caching (caches responses on both the raw user query and the GPT generated query with a ttl of 600)
 
 ## Considerations for a full app:
 - [ ] User Authentication (accounts, session management)
@@ -29,6 +37,7 @@ A FastAPI server with simple AI orchestration to generate outfits based on a use
     - Payments & E-commerce Integration (checkout, order tracking)
     - Social Features (share outfits, follow users, save favorite looks)
 - [ ] Region-specific recommendations (local brands, weather, currency, etc.)
+- [ ] Rate limiting
 
 ## On simulating AI chain of thought in the UI
 A naive approach would be to pass the user's query to an AI that outputs a structured response that fills the blanks in a template for steps that take place in the AI orchestration pipeline.
