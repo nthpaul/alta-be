@@ -38,7 +38,5 @@ A FastAPI server with simple AI orchestration to generate outfits based on a use
     - Social Features (share outfits, follow users, save favorite looks)
 - [ ] Region-specific recommendations (local brands, weather, currency, etc.)
 - [ ] Rate limiting
+- [ ] Realtime inference output generation sent to the client via a unilateral event stream 
 
-## On simulating AI chain of thought in the UI
-A naive approach would be to pass the user's query to an AI that outputs a structured response that fills the blanks in a template for steps that take place in the AI orchestration pipeline.
-E.g. For instance, if a user searches for 'affordable minimalist sneakers,' the AI might structure its thought process like: 1) Prioritizing budget-friendly options, 2) Filtering for minimalist styles, 3) Highlighting brands you've interacted with before.
